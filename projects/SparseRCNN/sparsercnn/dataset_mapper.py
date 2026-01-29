@@ -1,4 +1,6 @@
-#
+# ========================================
+# Modified by Victor Wåhlstrand
+# ========================================
 # Modified by Peize Sun, Rufeng Zhang
 # Contact: {sunpeize, cxrfzhang}@foxmail.com
 #
@@ -8,10 +10,13 @@ import logging
 
 import numpy as np
 import torch
+import os
 
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.data.transforms import TransformGen
+from detectron2.data import DatasetCatalog, MetadataCatalog
+from detectron2.data.datasets.coco import load_coco_json
 
 __all__ = ["SparseRCNNDatasetMapper"]
 
@@ -31,7 +36,9 @@ def build_transform_gen(cfg, is_train):
         max_size = cfg.INPUT.MAX_SIZE_TEST
         sample_style = "choice"
     if sample_style == "range":
-        assert len(min_size) == 2, "more than 2 ({}) min_size(s) are provided for ranges".format(len(min_size))
+        assert (
+            len(min_size) == 2
+        ), "more than 2 ({}) min_size(s) are provided for ranges".format(len(min_size))
 
     logger = logging.getLogger(__name__)
     tfm_gens = []
@@ -67,7 +74,9 @@ class SparseRCNNDatasetMapper:
 
         self.tfm_gens = build_transform_gen(cfg, is_train)
         logging.getLogger(__name__).info(
-            "Full TransformGens used in training: {}, crop: {}".format(str(self.tfm_gens), str(self.crop_gen))
+            "Full TransformGens used in training: {}, crop: {}".format(
+                str(self.tfm_gens), str(self.crop_gen)
+            )
         )
 
         self.img_format = cfg.INPUT.FORMAT
@@ -100,12 +109,14 @@ class SparseRCNNDatasetMapper:
         # Pytorch's dataloader is efficient on torch.Tensor due to shared-memory,
         # but not efficient on large generic data structures due to the use of pickle & mp.Queue.
         # Therefore it's important to use torch.Tensor.
-        dataset_dict["image"] = torch.as_tensor(np.ascontiguousarray(image.transpose(2, 0, 1)))
+        dataset_dict["image"] = torch.as_tensor(
+            np.ascontiguousarray(image.transpose(2, 0, 1))
+        )
 
-        if not self.is_train:
-            # USER: Modify this if you want to keep them for some reason.
-            dataset_dict.pop("annotations", None)
-            return dataset_dict
+        # if not self.is_train:
+        #     # USER: Modify this if you want to keep them for some reason.
+        #     dataset_dict.pop("annotations", None)
+        #     return dataset_dict
 
         if "annotations" in dataset_dict:
             # USER: Modify this if you want to keep them for some reason.
@@ -120,5 +131,49 @@ class SparseRCNNDatasetMapper:
                 if obj.get("iscrowd", 0) == 0
             ]
             instances = utils.annotations_to_instances(annos, image_shape)
+
+            # Annotations have a "known" field indicating whether the box is known
+            # Add known/unknown mask based on the known field
+            known_flags = torch.tensor(
+                [obj.get("known", False) for obj in annos], dtype=torch.bool
+            )
+            instances.known_mask = known_flags
+
             dataset_dict["instances"] = utils.filter_empty_instances(instances)
         return dataset_dict
+
+
+def register_coco_instances_sparsewyk(name, metadata, json_file, image_root):
+    """
+    Register a dataset in COCO's json annotation format for
+    instance detection, instance segmentation and keypoint detection.
+    (i.e., Type 1 and 2 in http://cocodataset.org/#format-data.
+    `instances*.json` and `person_keypoints*.json` in the dataset).
+
+    This is an example of how to register a new dataset.
+    You can do something similar to this function, to register new datasets.
+
+    Args:
+        name (str): the name that identifies a dataset, e.g. "coco_2014_train".
+        metadata (dict): extra metadata associated with this dataset.  You can
+            leave it as an empty dict.
+        json_file (str): path to the json instance annotation file.
+        image_root (str or path-like): directory which contains all the images.
+    """
+    assert isinstance(name, str), name
+    assert isinstance(json_file, (str, os.PathLike)), json_file
+    assert isinstance(image_root, (str, os.PathLike)), image_root
+    # 1. register a function which returns dicts
+    if name not in DatasetCatalog:
+        DatasetCatalog.register(
+            name,
+            lambda: load_coco_json(
+                json_file, image_root, name, extra_annotation_keys=["known"]
+            ),
+        )
+
+    # 2. Optionally, add metadata about this dataset,
+    # since they might be useful in evaluation, visualization or logging
+    MetadataCatalog.get(name).set(
+        json_file=json_file, image_root=image_root, evaluator_type="coco", **metadata
+    )

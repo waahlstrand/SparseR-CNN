@@ -22,17 +22,25 @@ import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog, build_detection_train_loader
-from detectron2.engine import AutogradProfiler, DefaultTrainer, default_argument_parser, default_setup, launch
+from detectron2.engine import (
+    AutogradProfiler,
+    DefaultTrainer,
+    default_argument_parser,
+    default_setup,
+    launch,
+)
 from detectron2.evaluation import COCOEvaluator, verify_results
 from detectron2.solver.build import maybe_add_gradient_clipping
 
 from sparsercnn import SparseRCNNDatasetMapper, add_sparsercnn_config, SparseRCNNWithTTA
 
+from sparsercnn.dataset_mapper import register_coco_instances_sparsewyk
+
 
 class Trainer(DefaultTrainer):
-#     """
-#     Extension of the Trainer class adapted to SparseRCNN.
-#     """
+    #     """
+    #     Extension of the Trainer class adapted to SparseRCNN.
+    #     """
 
     @classmethod
     def build_evaluator(cls, cfg, dataset_name, output_folder=None):
@@ -79,7 +87,9 @@ class Trainer(DefaultTrainer):
 
             class FullModelGradientClippingOptimizer(optim):
                 def step(self, closure=None):
-                    all_params = itertools.chain(*[x["params"] for x in self.param_groups])
+                    all_params = itertools.chain(
+                        *[x["params"] for x in self.param_groups]
+                    )
                     torch.nn.utils.clip_grad_norm_(all_params, clip_norm_val)
                     super().step(closure=closure)
 
@@ -116,6 +126,7 @@ class Trainer(DefaultTrainer):
         res = OrderedDict({k + "_TTA": v for k, v in res.items()})
         return res
 
+
 def setup(args):
     """
     Create configs and perform basic setups.
@@ -130,11 +141,27 @@ def setup(args):
 
 
 def main(args):
+
+    register_coco_instances_sparsewyk(
+        args.dataset_name + "_train",
+        {},
+        args.train_json_file,
+        args.train_image_root,
+    )
+    register_coco_instances_sparsewyk(
+        args.dataset_name + "_val",
+        {},
+        args.val_json_file,
+        args.val_image_root,
+    )
+
     cfg = setup(args)
 
     if args.eval_only:
         model = Trainer.build_model(cfg)
-        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(cfg.MODEL.WEIGHTS, resume=args.resume)
+        DetectionCheckpointer(model, save_dir=cfg.OUTPUT_DIR).resume_or_load(
+            cfg.MODEL.WEIGHTS, resume=args.resume
+        )
         res = Trainer.test(cfg, model)
         if cfg.TEST.AUG.ENABLED:
             res.update(Trainer.test_with_TTA(cfg, model))
@@ -148,7 +175,22 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = default_argument_parser().parse_args()
+    parser = default_argument_parser()
+
+    parser.add_argument("--dataset-name", type=str, help="name of the training dataset")
+
+    parser.add_argument("--train-image-root", type=str, help="path to training data")
+    parser.add_argument("--val-image-root", type=str, help="path to validation data")
+
+    parser.add_argument(
+        "--train-json-file", type=str, help="path to training json file"
+    )
+
+    parser.add_argument(
+        "--val-json-file", type=str, help="path to validation json file"
+    )
+
+    args = parser.parse_args()
     print("Command Line Args:", args)
     launch(
         main,
