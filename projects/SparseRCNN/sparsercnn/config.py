@@ -15,11 +15,16 @@ def add_sparsercnn_config(cfg):
     cfg.MODEL.SparseRCNN.NUM_CLASSES = 80
     cfg.MODEL.SparseRCNN.NUM_PROPOSALS = 300
 
+    # Additions from DiffusionDet
+    cfg.MODEL.SparseRCNN.NUM_KNOWN_TRAIN = 1
+    cfg.MODEL.SparseRCNN.NUM_KNOWN_TEST = 1
+    cfg.MODEL.SparseRCNN.NUM_TEST_PROPOSALS = 100
+
     # RCNN Head.
     cfg.MODEL.SparseRCNN.NHEADS = 8
     cfg.MODEL.SparseRCNN.DROPOUT = 0.0
     cfg.MODEL.SparseRCNN.DIM_FEEDFORWARD = 2048
-    cfg.MODEL.SparseRCNN.ACTIVATION = 'relu'
+    cfg.MODEL.SparseRCNN.ACTIVATION = "relu"
     cfg.MODEL.SparseRCNN.HIDDEN_DIM = 256
     cfg.MODEL.SparseRCNN.NUM_CLS = 1
     cfg.MODEL.SparseRCNN.NUM_REG = 3
@@ -47,13 +52,35 @@ def add_sparsercnn_config(cfg):
     cfg.SOLVER.BACKBONE_MULTIPLIER = 1.0
 
     # TTA.
-    cfg.TEST.AUG.MIN_SIZES = (400, 500, 600, 640, 700, 900, 1000, 1100, 1200, 1300, 1400, 1800, 800)
+    cfg.TEST.AUG.MIN_SIZES = (
+        400,
+        500,
+        600,
+        640,
+        700,
+        900,
+        1000,
+        1100,
+        1200,
+        1300,
+        1400,
+        1800,
+        800,
+    )
     cfg.TEST.AUG.CVPODS_TTA = True
     cfg.TEST.AUG.SCALE_FILTER = True
-    cfg.TEST.AUG.SCALE_RANGES = ([96, 10000], [96, 10000], 
-                                 [64, 10000], [64, 10000],
-                                 [64, 10000], [0, 10000],
-                                 [0, 10000], [0, 256],
-                                 [0, 256], [0, 192],
-                                 [0, 192], [0, 96],
-                                 [0, 10000])
+    cfg.TEST.AUG.SCALE_RANGES = (
+        [96, 10000],
+        [96, 10000],
+        [64, 10000],
+        [64, 10000],
+        [64, 10000],
+        [0, 10000],
+        [0, 10000],
+        [0, 256],
+        [0, 256],
+        [0, 192],
+        [0, 192],
+        [0, 96],
+        [0, 10000],
+    )
